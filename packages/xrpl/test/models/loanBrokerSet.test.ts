@@ -1,4 +1,7 @@
-import { validateLoanBrokerSet } from '../../src/models/transactions/loanBrokerSet'
+import {
+  LoanBrokerSetFlags,
+  validateLoanBrokerSet,
+} from '../../src/models/transactions/loanBrokerSet'
 import { assertTxIsValid, assertTxValidationError } from '../testUtils'
 
 const assertValid = (tx: any): void =>
@@ -126,5 +129,93 @@ describe('unit test LoanBrokerSet', () => {
       tx,
       'LoanBrokerSet: CoverRateMinimum and CoverRateLiquidation must both be zero or both be non-zero',
     )
+  })
+
+  describe('confidential', () => {
+    const KEY =
+      '0330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD020'
+    const PROOF = 'AB'.repeat(64)
+
+    beforeEach(() => {
+      delete tx.LoanBrokerID
+      delete tx.ManagementFeeRate
+      delete tx.CoverRateMinimum
+      delete tx.CoverRateLiquidation
+      tx.Flags = LoanBrokerSetFlags.tfLoanBrokerConfidential
+      tx.HolderEncryptionKey = KEY
+      tx.ZKProof = PROOF
+    })
+
+    test('valid confidential tx', () => {
+      assertValid(tx)
+      tx.Flags = { tfLoanBrokerConfidential: true }
+      assertValid(tx)
+    })
+
+    test('zero fee and cover rates are allowed', () => {
+      tx.ManagementFeeRate = 0
+      tx.CoverRateMinimum = 0
+      tx.CoverRateLiquidation = 0
+      assertValid(tx)
+    })
+
+    test('key or proof without the flag', () => {
+      delete tx.Flags
+      assertInvalid(
+        tx,
+        'LoanBrokerSet: HolderEncryptionKey and ZKProof require tfLoanBrokerConfidential',
+      )
+      delete tx.HolderEncryptionKey
+      assertInvalid(
+        tx,
+        'LoanBrokerSet: HolderEncryptionKey and ZKProof require tfLoanBrokerConfidential',
+      )
+    })
+
+    test('missing key or proof', () => {
+      delete tx.ZKProof
+      assertInvalid(
+        tx,
+        'LoanBrokerSet: tfLoanBrokerConfidential requires HolderEncryptionKey and ZKProof',
+      )
+      tx.ZKProof = PROOF
+      delete tx.HolderEncryptionKey
+      assertInvalid(
+        tx,
+        'LoanBrokerSet: tfLoanBrokerConfidential requires HolderEncryptionKey and ZKProof',
+      )
+    })
+
+    test('malformed key or proof', () => {
+      tx.HolderEncryptionKey = 'AB'.repeat(32)
+      assertInvalid(tx, 'LoanBrokerSet: invalid field HolderEncryptionKey')
+      tx.HolderEncryptionKey = KEY
+      tx.ZKProof = 'AB'.repeat(63)
+      assertInvalid(tx, 'LoanBrokerSet: invalid field ZKProof')
+    })
+
+    test('updating an existing LoanBroker', () => {
+      tx.LoanBrokerID =
+        'E9A08C918E26407493CC4ADD381BA979CFEB7E440D0863B01FB31C231D167E42'
+      assertInvalid(
+        tx,
+        'LoanBrokerSet: tfLoanBrokerConfidential can only be set when creating a LoanBroker',
+      )
+    })
+
+    test('non-zero fee or cover rates', () => {
+      tx.ManagementFeeRate = 500
+      assertInvalid(
+        tx,
+        'LoanBrokerSet: a confidential LoanBroker must have zero ManagementFeeRate, CoverRateMinimum and CoverRateLiquidation',
+      )
+      delete tx.ManagementFeeRate
+      tx.CoverRateMinimum = 10
+      tx.CoverRateLiquidation = 20
+      assertInvalid(
+        tx,
+        'LoanBrokerSet: a confidential LoanBroker must have zero ManagementFeeRate, CoverRateMinimum and CoverRateLiquidation',
+      )
+    })
   })
 })

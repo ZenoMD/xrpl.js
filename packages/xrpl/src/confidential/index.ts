@@ -36,6 +36,15 @@ export {
 
 export { prepareConfidentialBatch } from './batch'
 
+export {
+  fetchConfidentialLoanBroker,
+  getLendingBalance,
+  getLoanBrokerSetContextHash,
+  prepareConfidentialLoanBrokerSet,
+  prepareLoanBrokerDraw,
+  prepareLoanBrokerMergeInbox,
+} from './lending'
+
 export type {
   ConfidentialBatchInner,
   ConfidentialBatchOperation,
@@ -44,7 +53,11 @@ export type {
   ConfidentialConvertBackParams,
   ConfidentialConvertParams,
   ConfidentialKeypair,
+  ConfidentialLoanBrokerSetParams,
   ConfidentialMergeInboxParams,
   ConfidentialSendParams,
   ConfidentialSpendingState,
+  LendingBalance,
+  LoanBrokerDrawParams,
+  LoanBrokerMergeInboxParams,
 } from './types'

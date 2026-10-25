@@ -1,9 +1,14 @@
 import BigNumber from 'bignumber.js'
 
 import { ValidationError } from '../../errors'
+import { hasFlag } from '../utils'
 
 import {
   BaseTransaction,
+  GlobalFlagsInterface,
+  isHexWithByteLength,
+  CONFIDENTIAL_CONVERT_PROOF_BYTES,
+  CONFIDENTIAL_EC_POINT_BYTES,
   validateHexMetadata,
   isLedgerEntryId,
   isNumber,
@@ -19,6 +24,29 @@ const MAX_DATA_LENGTH = 512
 const MAX_MANAGEMENT_FEE_RATE = 10000
 const MAX_COVER_RATE_MINIMUM = 100000
 const MAX_COVER_RATE_LIQUIDATION = 100000
+
+/**
+ * Enum representing values of {@link LoanBrokerSet} transaction flags.
+ *
+ * @category Transaction Flags
+ */
+export enum LoanBrokerSetFlags {
+  /**
+   * Create the LoanBroker as confidential (ConfidentialLendingProtocol). Only
+   * allowed when creating a LoanBroker; requires HolderEncryptionKey and ZKProof.
+   */
+  tfLoanBrokerConfidential = 0x00020000,
+}
+
+/**
+ * Map of flags to boolean values representing {@link LoanBrokerSet} transaction
+ * flags.
+ *
+ * @category Transaction Flags
+ */
+export interface LoanBrokerSetFlagsInterface extends GlobalFlagsInterface {
+  tfLoanBrokerConfidential?: boolean
+}
 
 /**
  * The transaction creates a new LoanBroker object or updates an existing one.
@@ -64,6 +92,22 @@ export interface LoanBrokerSet extends BaseTransaction {
    * Valid values are between 0 and 100000 inclusive.
    */
   CoverRateLiquidation?: number
+
+  /**
+   * The Broker Key: the 33-byte compressed ElGamal public key the confidential
+   * Lending Balance is encrypted under. Required with tfLoanBrokerConfidential,
+   * otherwise not allowed.
+   */
+  HolderEncryptionKey?: string
+
+  /**
+   * A 64-byte Schnorr proof that the submitter knows the secret key for
+   * HolderEncryptionKey. Required with tfLoanBrokerConfidential, otherwise not
+   * allowed.
+   */
+  ZKProof?: string
+
+  Flags?: number | LoanBrokerSetFlagsInterface
 }
 
 /**
@@ -147,6 +191,65 @@ export function validateLoanBrokerSet(tx: Record<string, unknown>): void {
   ) {
     throw new ValidationError(
       'LoanBrokerSet: CoverRateMinimum and CoverRateLiquidation must both be zero or both be non-zero',
+    )
+  }
+
+  validateConfidentialFields(tx)
+}
+
+/**
+ * Validate the ConfidentialLendingProtocol fields of a LoanBrokerSet, mirroring
+ * rippled's preflight: a confidential LoanBroker is only created (never
+ * updated), carries both the Broker Key and its proof, and has no management
+ * fee or First-Loss Capital.
+ *
+ * @param tx - LoanBrokerSet Transaction.
+ * @throws When the confidential fields are malformed.
+ */
+// eslint-disable-next-line max-lines-per-function -- exhaustive validations
+function validateConfidentialFields(tx: Record<string, unknown>): void {
+  validateOptionalField(
+    tx,
+    'HolderEncryptionKey',
+    isHexWithByteLength(CONFIDENTIAL_EC_POINT_BYTES),
+  )
+  validateOptionalField(
+    tx,
+    'ZKProof',
+    isHexWithByteLength(CONFIDENTIAL_CONVERT_PROOF_BYTES),
+  )
+
+  const confidential = hasFlag(
+    tx,
+    LoanBrokerSetFlags.tfLoanBrokerConfidential,
+    'tfLoanBrokerConfidential',
+  )
+  if (!confidential) {
+    if (tx.HolderEncryptionKey != null || tx.ZKProof != null) {
+      throw new ValidationError(
+        'LoanBrokerSet: HolderEncryptionKey and ZKProof require tfLoanBrokerConfidential',
+      )
+    }
+    return
+  }
+
+  if (tx.LoanBrokerID != null) {
+    throw new ValidationError(
+      'LoanBrokerSet: tfLoanBrokerConfidential can only be set when creating a LoanBroker',
+    )
+  }
+  if (tx.HolderEncryptionKey == null || tx.ZKProof == null) {
+    throw new ValidationError(
+      'LoanBrokerSet: tfLoanBrokerConfidential requires HolderEncryptionKey and ZKProof',
+    )
+  }
+  if (
+    (tx.ManagementFeeRate ?? 0) !== 0 ||
+    (tx.CoverRateMinimum ?? 0) !== 0 ||
+    (tx.CoverRateLiquidation ?? 0) !== 0
+  ) {
+    throw new ValidationError(
+      'LoanBrokerSet: a confidential LoanBroker must have zero ManagementFeeRate, CoverRateMinimum and CoverRateLiquidation',
     )
   }
 }

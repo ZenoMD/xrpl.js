@@ -596,6 +596,74 @@ describe('client.autofill', function () {
       assert.strictEqual(txResult.Fee, '120')
     })
 
+    it('should autofill Fee of a confidential LoanBrokerSet', async function () {
+      const tx: Transaction = {
+        Account: 'rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn',
+        TransactionType: 'LoanBrokerSet',
+        VaultID:
+          '000004D417A9CE049C9A71A62B004659B5F1AAAB1BEA1EFDE4E01EB3497FD999',
+        Flags: { tfLoanBrokerConfidential: true },
+        HolderEncryptionKey:
+          '0330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD020',
+        ZKProof: 'AB'.repeat(64),
+      }
+      testContext.mockRippled!.addResponse(
+        'account_info',
+        rippled.account_info.normal,
+      )
+      testContext.mockRippled!.addResponse('ledger', rippled.ledger.normal)
+      testContext.mockRippled!.addResponse(
+        'server_info',
+        rippled.server_info.normal,
+      )
+
+      const txResult = await testContext.client.autofill(tx)
+      // base (12) × kCONFIDENTIAL_FEE_MULTIPLIER-plus-one (10) = 120.
+      assert.strictEqual(txResult.Fee, '120')
+    })
+
+    it('should autofill the base Fee of a non-confidential LoanBrokerSet', async function () {
+      const tx: Transaction = {
+        Account: 'rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn',
+        TransactionType: 'LoanBrokerSet',
+        VaultID:
+          '000004D417A9CE049C9A71A62B004659B5F1AAAB1BEA1EFDE4E01EB3497FD999',
+      }
+      testContext.mockRippled!.addResponse(
+        'account_info',
+        rippled.account_info.normal,
+      )
+      testContext.mockRippled!.addResponse('ledger', rippled.ledger.normal)
+      testContext.mockRippled!.addResponse(
+        'server_info',
+        rippled.server_info.normal,
+      )
+
+      const txResult = await testContext.client.autofill(tx)
+      assert.strictEqual(txResult.Fee, '12')
+    })
+
+    it('should autofill Fee of a LoanBrokerMergeInbox', async function () {
+      const tx: Transaction = {
+        Account: 'rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn',
+        TransactionType: 'LoanBrokerMergeInbox',
+        LoanBrokerID:
+          'E9A08C918E26407493CC4ADD381BA979CFEB7E440D0863B01FB31C231D167E42',
+      }
+      testContext.mockRippled!.addResponse(
+        'account_info',
+        rippled.account_info.normal,
+      )
+      testContext.mockRippled!.addResponse('ledger', rippled.ledger.normal)
+      testContext.mockRippled!.addResponse(
+        'server_info',
+        rippled.server_info.normal,
+      )
+
+      const txResult = await testContext.client.autofill(tx)
+      assert.strictEqual(txResult.Fee, '120')
+    })
+
     it('should autofill Fee of a confidential MPT transaction with signersCount', async function () {
       const tx: Transaction = {
         Account: 'rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn',

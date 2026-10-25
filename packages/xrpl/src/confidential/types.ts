@@ -165,6 +165,58 @@ export interface ConfidentialMergeInboxParams extends BaseConfidentialParams {
 }
 
 /**
+ * Inputs shared by the Confidential Lending Protocol builders. Unlike the
+ * Confidential MPT builders these take no `mptIssuanceID`: the issuance is the
+ * Vault's asset, which the builder reads from the ledger.
+ */
+interface BaseLendingParams {
+  /** The LoanBroker owner's classic XRPL address (the submitting account). */
+  account: string
+  /** See {@link BaseConfidentialParams.sequence}. */
+  sequence?: number
+  /** See {@link BaseConfidentialParams.ledgerIndex}. */
+  ledgerIndex?: LedgerIndex
+}
+
+/** Inputs for {@link prepareConfidentialLoanBrokerSet}. */
+export interface ConfidentialLoanBrokerSetParams extends BaseLendingParams {
+  /** The ID of the Vault the LoanBroker lends from. Its asset must be an MPT. */
+  vaultID: string
+  /**
+   * The Broker Key: the ElGamal keypair the Lending Balance is encrypted under.
+   * Persist the private key — it is the only thing that can decrypt the
+   * Lending Balance and is needed to fund loans from it.
+   */
+  brokerKeypair: ConfidentialKeypair
+  /** Optional arbitrary hex metadata (`Data`). */
+  data?: string
+  /** Optional `DebtMaximum`, limiting the amount the broker can draw. */
+  debtMaximum?: string
+}
+
+/** Inputs for {@link prepareLoanBrokerDraw}. */
+export interface LoanBrokerDrawParams extends BaseLendingParams {
+  /** The confidential LoanBroker drawing from its Vault. */
+  loanBrokerID: string
+  /** The MPT amount to draw into the Lending Balance inbox. */
+  amount: bigint
+}
+
+/** Inputs for {@link prepareLoanBrokerMergeInbox}. */
+export interface LoanBrokerMergeInboxParams extends BaseLendingParams {
+  /** The confidential LoanBroker whose Lending Balance inbox is merged. */
+  loanBrokerID: string
+}
+
+/** A confidential LoanBroker's decrypted Lending Balance. */
+export interface LendingBalance {
+  /** The spendable balance (`ConfidentialBalanceSpending`). */
+  spending: bigint
+  /** Drawn funds not yet merged into the spendable balance. */
+  inbox: bigint
+}
+
+/**
  * One confidential operation in a {@link ConfidentialBatchParams} inner list: a
  * build *recipe*, not a transaction — the assembler builds the ciphertexts and
  * zero-knowledge proof from it. Discriminated by `operation`; each variant is the matching

@@ -129,6 +129,61 @@ const spendable = await getConfidentialBalance(
 
 Parameter shapes for each are in [`types.ts`](./types.ts).
 
+## Confidential lending
+
+A confidential LoanBroker (Confidential Lending Protocol) lends from a
+**Lending Balance**: a confidential balance on the LoanBroker pseudo-account's
+MPToken, encrypted under the **Broker Key**. The Vault's asset must be an MPT
+with confidential balances enabled and both an issuer and an auditor key.
+
+```ts
+import {
+  deriveConfidentialKeypair,
+  getLendingBalance,
+  prepareConfidentialLoanBrokerSet,
+  prepareLoanBrokerDraw,
+  prepareLoanBrokerMergeInbox,
+} from 'xrpl'
+
+// The Broker Key — persist the private key, it decrypts the Lending Balance.
+const brokerKey = deriveConfidentialKeypair()
+
+// 1. Create the confidential LoanBroker over a Vault the broker owns.
+const create = await prepareConfidentialLoanBrokerSet(client, {
+  account: broker.classicAddress,
+  vaultID,
+  brokerKeypair: brokerKey,
+})
+await client.submitAndWait(create, { wallet: broker })
+// The LoanBrokerID is the created LoanBroker entry's index, from the metadata.
+
+// 2. Draw 1000 from the Vault into the Lending Balance inbox.
+const draw = await prepareLoanBrokerDraw(client, {
+  account: broker.classicAddress,
+  loanBrokerID,
+  amount: 1000n,
+})
+await client.submitAndWait(draw, { wallet: broker })
+
+// 3. Merge the inbox into the spendable Lending Balance.
+const merge = await prepareLoanBrokerMergeInbox(client, {
+  account: broker.classicAddress,
+  loanBrokerID,
+})
+await client.submitAndWait(merge, { wallet: broker })
+
+await getLendingBalance(client, loanBrokerID, brokerKey.privateKey)
+// { spending: 1000n, inbox: 0n }
+```
+
+| Builder | Actor | Purpose |
+| --- | --- | --- |
+| `prepareConfidentialLoanBrokerSet` | broker | Create a confidential LoanBroker, registering the Broker Key with a Schnorr proof bound to the `LoanBrokerSet` context hash. |
+| `prepareLoanBrokerDraw` | broker | Draw a public amount from the Vault into the Lending Balance inbox, encrypted under the Broker, issuer and auditor keys. |
+| `prepareLoanBrokerMergeInbox` | broker | Fold the Lending Balance inbox into its spendable balance. Requires no crypto material. |
+
+These are not yet supported as `prepareConfidentialBatch` operations.
+
 ## Batching
 
 `prepareConfidentialBatch` (the assembler) builds a Batch (XLS-56) whose inner

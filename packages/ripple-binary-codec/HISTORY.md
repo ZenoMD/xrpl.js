@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+* Add the Confidential Lending Protocol `LoanBrokerDraw` (97) and `LoanBrokerMergeInbox` (98) transaction types, the `tfLoanBrokerConfidential` and `lsfLoanBrokerConfidential` flags, and `HolderEncryptionKey`/`ZKProof` on `LoanBrokerSet`.
+
 ## 2.11.0 (2026-09-11)
 
 ### Added

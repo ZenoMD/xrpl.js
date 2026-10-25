@@ -3659,6 +3659,9 @@
       "lsfLoanImpaired": 131072,
       "lsfLoanOverpayment": 262144
     },
+    "LoanBroker": {
+      "lsfLoanBrokerConfidential": 131072
+    },
     "MPToken": {
       "lsfMPTAMM": 4,
       "lsfMPTAuthorized": 2,
@@ -5225,6 +5228,9 @@
       "tfGotMajority": 65536,
       "tfLostMajority": 131072
     },
+    "LoanBrokerSet": {
+      "tfLoanBrokerConfidential": 131072
+    },
     "LoanManage": {
       "tfLoanDefault": 65536,
       "tfLoanImpair": 131072,
@@ -5926,6 +5932,38 @@
         "optionality": 0
       }
     ],
+    "LoanBrokerDraw": [
+      {
+        "name": "LoanBrokerID",
+        "optionality": 0
+      },
+      {
+        "name": "Amount",
+        "optionality": 0
+      },
+      {
+        "name": "HolderEncryptedAmount",
+        "optionality": 0
+      },
+      {
+        "name": "IssuerEncryptedAmount",
+        "optionality": 0
+      },
+      {
+        "name": "AuditorEncryptedAmount",
+        "optionality": 0
+      },
+      {
+        "name": "BlindingFactor",
+        "optionality": 0
+      }
+    ],
+    "LoanBrokerMergeInbox": [
+      {
+        "name": "LoanBrokerID",
+        "optionality": 0
+      }
+    ],
     "LoanBrokerSet": [
       {
         "name": "VaultID",
@@ -5953,6 +5991,14 @@
       },
       {
         "name": "CoverRateLiquidation",
+        "optionality": 1
+      },
+      {
+        "name": "HolderEncryptionKey",
+        "optionality": 1
+      },
+      {
+        "name": "ZKProof",
         "optionality": 1
       }
     ],
@@ -7137,6 +7183,8 @@
     "LoanBrokerCoverDeposit": 76,
     "LoanBrokerCoverWithdraw": 77,
     "LoanBrokerDelete": 75,
+    "LoanBrokerDraw": 97,
+    "LoanBrokerMergeInbox": 98,
     "LoanBrokerSet": 74,
     "LoanDelete": 81,
     "LoanManage": 82,

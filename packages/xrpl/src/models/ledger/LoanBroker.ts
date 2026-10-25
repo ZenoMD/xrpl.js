@@ -93,3 +93,11 @@ export default interface LoanBroker extends BaseLedgerEntry, HasPreviousTxnID {
    */
   CoverRateLiquidation?: number
 }
+
+export enum LoanBrokerFlags {
+  /**
+   * If set, indicates that the LoanBroker is confidential: its Lending Balance
+   * is held as confidential balances on the pseudo-account's MPToken.
+   */
+  lsfLoanBrokerConfidential = 0x00020000,
+}

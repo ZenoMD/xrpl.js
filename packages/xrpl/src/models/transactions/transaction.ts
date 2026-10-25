@@ -67,6 +67,11 @@ import {
   validateLoanBrokerCoverWithdraw,
 } from './loanBrokerCoverWithdraw'
 import { LoanBrokerDelete, validateLoanBrokerDelete } from './loanBrokerDelete'
+import { LoanBrokerDraw, validateLoanBrokerDraw } from './loanBrokerDraw'
+import {
+  LoanBrokerMergeInbox,
+  validateLoanBrokerMergeInbox,
+} from './loanBrokerMergeInbox'
 import { LoanBrokerSet, validateLoanBrokerSet } from './loanBrokerSet'
 import { LoanDelete, validateLoanDelete } from './loanDelete'
 import { LoanManage, validateLoanManage } from './loanManage'
@@ -210,6 +215,8 @@ export type SubmittableTransaction =
   | LoanBrokerCoverDeposit
   | LoanBrokerCoverWithdraw
   | LoanBrokerDelete
+  | LoanBrokerDraw
+  | LoanBrokerMergeInbox
   | LoanSet
   | LoanDelete
   | LoanManage
@@ -452,6 +459,14 @@ export function validate(transaction: Record<string, unknown>): void {
 
     case 'LoanBrokerDelete':
       validateLoanBrokerDelete(tx)
+      break
+
+    case 'LoanBrokerDraw':
+      validateLoanBrokerDraw(tx)
+      break
+
+    case 'LoanBrokerMergeInbox':
+      validateLoanBrokerMergeInbox(tx)
       break
 
     case 'LoanBrokerSet':

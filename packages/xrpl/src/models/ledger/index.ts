@@ -21,7 +21,7 @@ import { Ledger, LedgerV1 } from './Ledger'
 import { LedgerEntry, LedgerEntryFilter } from './LedgerEntry'
 import LedgerHashes from './LedgerHashes'
 import Loan, { LoanFlags } from './Loan'
-import LoanBroker from './LoanBroker'
+import LoanBroker, { LoanBrokerFlags } from './LoanBroker'
 import { MPToken } from './MPToken'
 import {
   MPTokenIssuance,
@@ -71,6 +71,7 @@ export {
   Loan,
   LoanFlags,
   LoanBroker,
+  LoanBrokerFlags,
   Majority,
   NEGATIVE_UNL_ID,
   NegativeUNL,

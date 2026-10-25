@@ -11,8 +11,14 @@ import {
   AccountObjectsRequest,
   LedgerEntryRequest,
 } from '../models/methods'
-import { Batch, Payment, Transaction } from '../models/transactions'
+import {
+  Batch,
+  LoanBrokerSetFlags,
+  Payment,
+  Transaction,
+} from '../models/transactions'
 import { Account, areAddressesEqual } from '../models/transactions/common'
+import { hasFlag } from '../models/utils'
 import { xrpToDrops } from '../utils'
 
 import getFeeXrp from './getFeeXrp'
@@ -35,7 +41,31 @@ const CONFIDENTIAL_MPT_TRANSACTION_TYPES = [
   'ConfidentialMPTSend',
   'ConfidentialMPTClawback',
   'ConfidentialMPTMergeInbox',
+  // Confidential Lending Protocol: the Lending Balance equivalents of Convert and
+  // MergeInbox. A confidential LoanBrokerSet is matched by flag in
+  // isConfidentialTransaction.
+  'LoanBrokerDraw',
+  'LoanBrokerMergeInbox',
 ]
+
+/**
+ * Whether rippled charges a transaction the confidential fee multiplier.
+ *
+ * @param tx - The transaction object.
+ * @returns True for Confidential MPT transactions, the confidential Lending
+ * Balance transactions, and a LoanBrokerSet creating a confidential LoanBroker.
+ */
+function isConfidentialTransaction(tx: Transaction): boolean {
+  return (
+    CONFIDENTIAL_MPT_TRANSACTION_TYPES.includes(tx.TransactionType) ||
+    (tx.TransactionType === 'LoanBrokerSet' &&
+      hasFlag(
+        tx,
+        LoanBrokerSetFlags.tfLoanBrokerConfidential,
+        'tfLoanBrokerConfidential',
+      ))
+  )
+}
 
 /**
  * Determines whether the source rippled version is not later than the target rippled version.
@@ -402,7 +432,7 @@ async function calculateFeePerTransactionType(
       Promise.resolve(new BigNumber(0)),
     )
     baseFee = BigNumber.sum(baseFee.times(2), rawTxFees)
-  } else if (CONFIDENTIAL_MPT_TRANSACTION_TYPES.includes(tx.TransactionType)) {
+  } else if (isConfidentialTransaction(tx)) {
     /*
      * Confidential MPT Transaction
      * rippled charges kCONFIDENTIAL_FEE_MULTIPLIER (9) extra base fees on top of
