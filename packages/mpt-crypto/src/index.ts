@@ -22,6 +22,10 @@ export {
   CLAWBACK_PROOF_SIZE,
   CONVERT_BACK_PROOF_SIZE,
   SEND_PROOF_SIZE,
+  SEND_SIGMA_PROOF_SIZE,
+  CONVERT_BACK_SIGMA_PROOF_SIZE,
+  SINGLE_BULLETPROOF_SIZE,
+  DOUBLE_BULLETPROOF_SIZE,
 } from './constants'
 export { bytesToHex, hexToBytes } from './hex'
 export { loadWasmModule } from './module'
@@ -35,6 +39,24 @@ export {
 } from './primitives'
 
 export { addCiphertexts, subtractCiphertexts } from './homomorphic'
+
+export {
+  getAggregatedRangeProof,
+  getConvertBackSigmaProof,
+  getSendSigmaProof,
+  multiplyScalar,
+  subtractScalars,
+  verifyAggregatedRangeProof,
+  verifyClawbackProof,
+  verifyConvertBackSigmaProof,
+  verifySendSigmaProof,
+} from './sigma'
+export type {
+  ConvertBackSigmaProofParams,
+  ConvertBackSigmaStatement,
+  SendSigmaProofParams,
+  SendSigmaStatement,
+} from './sigma'
 
 export {
   getConvertContextHash,

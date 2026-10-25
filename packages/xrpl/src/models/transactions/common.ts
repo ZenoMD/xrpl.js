@@ -44,6 +44,11 @@ export const CONFIDENTIAL_CONVERT_PROOF_BYTES = 64
 export const CONFIDENTIAL_CLAWBACK_PROOF_BYTES = 64
 export const CONFIDENTIAL_CONVERT_BACK_PROOF_BYTES = 816
 export const CONFIDENTIAL_SEND_PROOF_BYTES = 946
+// Confidential Lending Protocol proofs: concatenations of XLS-96 Send,
+// ConvertBack and Clawback sigma proofs and aggregated Bulletproofs.
+export const CONFIDENTIAL_LOAN_SET_PROOF_BYTES = 3030
+export const CONFIDENTIAL_LOAN_PAY_PROOF_BYTES = 2148
+export const CONFIDENTIAL_LOAN_FULL_PAY_PROOF_BYTES = 1202
 // Max MPT amount: 2^63 - 1.
 export const MAX_MPT_AMOUNT = BigInt('9223372036854775807')
 

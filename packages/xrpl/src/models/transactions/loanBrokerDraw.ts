@@ -59,12 +59,16 @@ export interface LoanBrokerDraw extends BaseTransaction {
 }
 
 /**
- * Verify the form and type of a LoanBrokerDraw at runtime.
+ * Verify the fields LoanBrokerDraw and LoanBrokerSettle share: a public MPT
+ * amount moved into or out of the Lending Balance, with its ciphertexts under
+ * the Broker, issuer and MPT Auditor keys and their shared blinding factor.
  *
- * @param tx - LoanBrokerDraw Transaction.
- * @throws When LoanBrokerDraw is Malformed.
+ * @param tx - LoanBrokerDraw or LoanBrokerSettle Transaction.
+ * @throws When the shared fields are malformed.
  */
-export function validateLoanBrokerDraw(tx: Record<string, unknown>): void {
+export function validateLendingBalanceTransfer(
+  tx: Record<string, unknown>,
+): void {
   validateBaseTransaction(tx)
 
   validateRequiredField(tx, 'LoanBrokerID', isString)
@@ -86,9 +90,10 @@ export function validateLoanBrokerDraw(tx: Record<string, unknown>): void {
     isHexWithByteLength(CONFIDENTIAL_BLINDING_FACTOR_BYTES),
   )
 
+  const txType = String(tx.TransactionType)
   if (!isLedgerEntryId(tx.LoanBrokerID)) {
     throw new ValidationError(
-      'LoanBrokerDraw: LoanBrokerID must be 64 characters hexadecimal string',
+      `${txType}: LoanBrokerID must be 64 characters hexadecimal string`,
     )
   }
 
@@ -99,7 +104,17 @@ export function validateLoanBrokerDraw(tx: Record<string, unknown>): void {
     BigInt(value) > MAX_MPT_AMOUNT
   ) {
     throw new ValidationError(
-      'LoanBrokerDraw: Amount must be a positive integer MPT amount',
+      `${txType}: Amount must be a positive integer MPT amount`,
     )
   }
+}
+
+/**
+ * Verify the form and type of a LoanBrokerDraw at runtime.
+ *
+ * @param tx - LoanBrokerDraw Transaction.
+ * @throws When LoanBrokerDraw is Malformed.
+ */
+export function validateLoanBrokerDraw(tx: Record<string, unknown>): void {
+  validateLendingBalanceTransfer(tx)
 }

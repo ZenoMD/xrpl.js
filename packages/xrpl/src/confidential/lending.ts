@@ -1,18 +1,24 @@
+/* eslint-disable max-lines -- the confidential LoanBroker builders share their ledger reads */
 import { type Client } from '../client'
 import { XrplError } from '../errors'
 import { LedgerIndex } from '../models/common'
-import { LoanBroker, LoanBrokerFlags, Vault } from '../models/ledger'
+import {
+  LoanBroker,
+  LoanBrokerFlags,
+  MPToken,
+  MPTokenIssuance,
+  Vault,
+} from '../models/ledger'
 import {
   LoanBrokerDraw,
   LoanBrokerMergeInbox,
   LoanBrokerSet,
   LoanBrokerSetFlags,
+  LoanBrokerSettle,
 } from '../models/transactions'
 import { isFlagEnabled } from '../models/utils'
-import sha512Half from '../utils/hashes/sha512Half'
 
 import {
-  accountIdHex,
   assertConfidentialAmount,
   decryptBound,
   fetchMPToken,
@@ -20,62 +26,21 @@ import {
   requireIssuerKey,
   resolveLedgerIndex,
   resolveSequence,
+  resolveSpendingState,
 } from './ledger'
+import {
+  getLoanBrokerSetContextHash,
+  getLoanBrokerSettleContextHash,
+} from './lendingContext'
 import { loadMptCrypto } from './loader'
 import {
+  ConfidentialKeypair,
   ConfidentialLoanBrokerSetParams,
   LendingBalance,
   LoanBrokerDrawParams,
   LoanBrokerMergeInboxParams,
+  LoanBrokerSettleParams,
 } from './types'
-
-// rippled ttLOAN_BROKER_SET, bound into the LoanBrokerSet context hash.
-const LOAN_BROKER_SET_TX_TYPE = 74
-const UINT16_BYTES = 2
-const UINT32_BYTES = 4
-const HEX_RADIX = 16
-
-/**
- * Hex-encode an unsigned integer big-endian in `bytes` bytes.
- *
- * @param value - The integer to encode.
- * @param bytes - The encoded width.
- * @returns The uppercase hex encoding.
- */
-function uintHex(value: number, bytes: number): string {
-  return value
-    .toString(HEX_RADIX)
-    .toUpperCase()
-    .padStart(bytes * 2, '0')
-}
-
-/**
- * Context hash the confidential LoanBrokerSet Schnorr proof is bound to. It has
- * the same layout as the ConfidentialMPTConvert context hash, but with the
- * LoanBrokerSet transaction type, which the mpt-crypto WASM hard-codes — so it is
- * computed here rather than there:
- * `SHA-512Half(TxType || Account || MPTokenIssuanceID || Sequence || Account || 0)`.
- *
- * @param account - The LoanBroker owner's classic address.
- * @param mptIssuanceID - The 24-byte hex issuance ID of the Vault's asset.
- * @param sequence - The transaction's `Sequence` (or `TicketSequence`).
- * @returns The 32-byte hex context hash.
- */
-export function getLoanBrokerSetContextHash(
-  account: string,
-  mptIssuanceID: string,
-  sequence: number,
-): string {
-  const accountHex = accountIdHex(account)
-  return sha512Half(
-    uintHex(LOAN_BROKER_SET_TX_TYPE, UINT16_BYTES) +
-      accountHex +
-      mptIssuanceID +
-      uintHex(sequence, UINT32_BYTES) +
-      accountHex +
-      uintHex(0, UINT32_BYTES),
-  )
-}
 
 /**
  * Fetch a ledger entry by its ID.
@@ -85,7 +50,7 @@ export function getLoanBrokerSetContextHash(
  * @param ledgerIndex - Ledger to read at.
  * @returns The ledger entry.
  */
-async function fetchEntry<T>(
+export async function fetchEntry<T>(
   client: Client,
   index: string,
   ledgerIndex?: LedgerIndex,
@@ -108,7 +73,7 @@ async function fetchEntry<T>(
  * @returns The 24-byte hex issuance ID.
  * @throws {XrplError} If the Vault's asset is not an MPT.
  */
-async function fetchVaultIssuanceID(
+export async function fetchVaultIssuanceID(
   client: Client,
   vaultID: string,
   ledgerIndex?: LedgerIndex,
@@ -209,7 +174,6 @@ export async function prepareConfidentialLoanBrokerSet(
  * @returns The assembled, unsigned LoanBrokerDraw transaction.
  * @throws {XrplError} If the LoanBroker is not confidential, or a key is missing.
  */
-// eslint-disable-next-line max-lines-per-function -- one cohesive ciphertext-assembly flow
 export async function prepareLoanBrokerDraw(
   client: Client,
   params: LoanBrokerDrawParams,
@@ -220,30 +184,11 @@ export async function prepareLoanBrokerDraw(
     loadMptCrypto(),
     resolveLedgerIndex(client, params.ledgerIndex),
   ])
-  const [broker, sequence] = await Promise.all([
-    fetchConfidentialLoanBroker(client, params.loanBrokerID, ledgerIndex),
+  const [lending, sequence] = await Promise.all([
+    fetchLendingContext(client, params.loanBrokerID, ledgerIndex),
     resolveSequence(client, params.account, params.sequence),
   ])
-  const mptIssuanceID = await fetchVaultIssuanceID(
-    client,
-    broker.VaultID,
-    ledgerIndex,
-  )
-  const [issuance, lendingBalance] = await Promise.all([
-    fetchMPTokenIssuance(client, mptIssuanceID, ledgerIndex),
-    fetchMPToken(client, broker.Account, mptIssuanceID, ledgerIndex),
-  ])
-  const issuerKey = requireIssuerKey(issuance, mptIssuanceID)
-  const auditorKey = requireAuditorKey(
-    issuance.AuditorEncryptionKey,
-    mptIssuanceID,
-  )
-  const brokerKey = lendingBalance.HolderEncryptionKey
-  if (brokerKey == null) {
-    throw new XrplError(
-      `LoanBroker ${params.loanBrokerID} has no registered Broker Key`,
-    )
-  }
+  const { mptIssuanceID, issuerKey, auditorKey, brokerKey } = lending
 
   const { amount } = params
   const blindingFactor = await crypto.generateBlindingFactor()
@@ -264,6 +209,103 @@ export async function prepareLoanBrokerDraw(
     IssuerEncryptedAmount: issuerEncryptedAmount,
     AuditorEncryptedAmount: auditorEncryptedAmount,
     BlindingFactor: blindingFactor,
+  }
+}
+
+/**
+ * Build a LoanBrokerSettle transaction that returns a public amount from a
+ * confidential LoanBroker's Lending Balance to its Vault. It is a
+ * ConfidentialMPTConvertBack of the Lending Balance: the spending balance is
+ * decrypted with the Broker Key to form the balance witness, and the proof binds
+ * the LoanBrokerSettle context hash.
+ *
+ * @param client - A connected Client.
+ * @param params - The settle inputs.
+ * @returns The assembled, unsigned LoanBrokerSettle transaction.
+ * @throws {XrplError} If the LoanBroker is not confidential, `brokerKeypair` is
+ * not its Broker Key, or the amount exceeds the spendable Lending Balance.
+ */
+// eslint-disable-next-line max-lines-per-function -- one cohesive proof-assembly flow
+export async function prepareLoanBrokerSettle(
+  client: Client,
+  params: LoanBrokerSettleParams,
+): Promise<LoanBrokerSettle> {
+  // rippled rejects a zero-amount settle with temBAD_AMOUNT.
+  assertConfidentialAmount(params.amount, false)
+  const [crypto, ledgerIndex] = await Promise.all([
+    loadMptCrypto(),
+    resolveLedgerIndex(client, params.ledgerIndex),
+  ])
+  const [lending, sequence] = await Promise.all([
+    fetchLendingContext(client, params.loanBrokerID, ledgerIndex),
+    resolveSequence(client, params.account, params.sequence),
+  ])
+  const { amount, brokerKeypair } = params
+  requireBrokerKeypair(lending, brokerKeypair)
+  const { spending, version } = resolveSpendingState(
+    lending.lendingBalance,
+    lending.broker.Account,
+  )
+
+  const [balance, blindingFactor, rho] = await Promise.all([
+    crypto.decryptAmount(
+      spending,
+      brokerKeypair.privateKey,
+      decryptBound(lending.issuance),
+    ),
+    crypto.generateBlindingFactor(),
+    crypto.generateBlindingFactor(),
+  ])
+  if (amount > balance) {
+    throw new XrplError(
+      `Settle amount ${amount.toString()} exceeds the spendable Lending Balance ${balance.toString()}`,
+    )
+  }
+  const balanceCommitment = await crypto.getPedersenCommitment(balance, rho)
+  const contextHash = getLoanBrokerSettleContextHash(
+    lending.broker.Account,
+    lending.mptIssuanceID,
+    sequence,
+    version,
+  )
+  const [
+    holderEncryptedAmount,
+    issuerEncryptedAmount,
+    auditorEncryptedAmount,
+    zkProof,
+  ] = await Promise.all([
+    crypto.encryptAmount(amount, lending.brokerKey, blindingFactor),
+    crypto.encryptAmount(amount, lending.issuerKey, blindingFactor),
+    crypto.encryptAmount(amount, lending.auditorKey, blindingFactor),
+    crypto.getConvertBackProof(
+      brokerKeypair.privateKey,
+      brokerKeypair.publicKey,
+      contextHash,
+      amount,
+      {
+        commitment: balanceCommitment,
+        amount: balance,
+        ciphertext: spending,
+        blindingFactor: rho,
+      },
+    ),
+  ])
+
+  return {
+    TransactionType: 'LoanBrokerSettle',
+    Account: params.account,
+    Sequence: sequence,
+    LoanBrokerID: params.loanBrokerID,
+    Amount: {
+      mpt_issuance_id: lending.mptIssuanceID,
+      value: amount.toString(),
+    },
+    HolderEncryptedAmount: holderEncryptedAmount,
+    IssuerEncryptedAmount: issuerEncryptedAmount,
+    AuditorEncryptedAmount: auditorEncryptedAmount,
+    BlindingFactor: blindingFactor,
+    BalanceCommitment: balanceCommitment,
+    ZKProof: zkProof,
   }
 }
 
@@ -305,19 +347,8 @@ export async function getLendingBalance(
 ): Promise<LendingBalance> {
   // One ledger for every read, so the decrypt bound covers the balances.
   const ledgerIndex = await client.getLedgerIndex()
-  const broker = await fetchConfidentialLoanBroker(
-    client,
-    loanBrokerID,
-    ledgerIndex,
-  )
-  const mptIssuanceID = await fetchVaultIssuanceID(
-    client,
-    broker.VaultID,
-    ledgerIndex,
-  )
-  const [issuance, lendingBalance, crypto] = await Promise.all([
-    fetchMPTokenIssuance(client, mptIssuanceID, ledgerIndex),
-    fetchMPToken(client, broker.Account, mptIssuanceID, ledgerIndex),
+  const [{ issuance, lendingBalance }, crypto] = await Promise.all([
+    fetchLendingContext(client, loanBrokerID, ledgerIndex),
     loadMptCrypto(),
   ])
   const bound = decryptBound(issuance)
@@ -343,7 +374,7 @@ export async function getLendingBalance(
  * @returns The auditor's 33-byte hex public key.
  * @throws {XrplError} If no auditor encryption key is registered.
  */
-function requireAuditorKey(
+export function requireAuditorKey(
   auditorKey: string | undefined,
   mptIssuanceID: string,
 ): string {
@@ -353,4 +384,91 @@ function requireAuditorKey(
     )
   }
   return auditorKey
+}
+
+/**
+ * The ledger state a confidential LoanBroker's transactions are built from.
+ */
+export interface LendingContext {
+  /** The confidential LoanBroker. */
+  broker: LoanBroker
+  /** The issuance ID of the Vault's asset. */
+  mptIssuanceID: string
+  /** The Vault asset's MPTokenIssuance. */
+  issuance: MPTokenIssuance
+  /** The LoanBroker pseudo-account's MPToken, holding the Lending Balance. */
+  lendingBalance: MPToken
+  /** The issuer's encryption key. */
+  issuerKey: string
+  /** The MPT Auditor's encryption key. */
+  auditorKey: string
+  /** The Broker Key. */
+  brokerKey: string
+}
+
+/**
+ * Read a confidential LoanBroker, its Vault's issuance and its Lending Balance,
+ * all at one ledger.
+ *
+ * @param client - A connected Client.
+ * @param loanBrokerID - The confidential LoanBroker.
+ * @param ledgerIndex - Ledger to read at.
+ * @returns The LoanBroker's lending context.
+ * @throws {XrplError} If the LoanBroker is not confidential, or a key is missing.
+ */
+export async function fetchLendingContext(
+  client: Client,
+  loanBrokerID: string,
+  ledgerIndex?: LedgerIndex,
+): Promise<LendingContext> {
+  const broker = await fetchConfidentialLoanBroker(
+    client,
+    loanBrokerID,
+    ledgerIndex,
+  )
+  const mptIssuanceID = await fetchVaultIssuanceID(
+    client,
+    broker.VaultID,
+    ledgerIndex,
+  )
+  const [issuance, lendingBalance] = await Promise.all([
+    fetchMPTokenIssuance(client, mptIssuanceID, ledgerIndex),
+    fetchMPToken(client, broker.Account, mptIssuanceID, ledgerIndex),
+  ])
+  const brokerKey = lendingBalance.HolderEncryptionKey
+  if (brokerKey == null) {
+    throw new XrplError(
+      `LoanBroker ${loanBrokerID} has no registered Broker Key`,
+    )
+  }
+  return {
+    broker,
+    mptIssuanceID,
+    issuance,
+    lendingBalance,
+    issuerKey: requireIssuerKey(issuance, mptIssuanceID),
+    auditorKey: requireAuditorKey(issuance.AuditorEncryptionKey, mptIssuanceID),
+    brokerKey,
+  }
+}
+
+/**
+ * Check that a keypair is the LoanBroker's registered Broker Key, so a proof
+ * built with it can verify.
+ *
+ * @param lending - The LoanBroker's lending context.
+ * @param brokerKeypair - The keypair to check.
+ * @throws {XrplError} If the public key is not the Broker Key.
+ */
+export function requireBrokerKeypair(
+  lending: LendingContext,
+  brokerKeypair: ConfidentialKeypair,
+): void {
+  if (
+    brokerKeypair.publicKey.toUpperCase() !== lending.brokerKey.toUpperCase()
+  ) {
+    throw new XrplError(
+      `brokerKeypair is not the Broker Key of LoanBroker ${lending.broker.index}`,
+    )
+  }
 }

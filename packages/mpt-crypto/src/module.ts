@@ -130,6 +130,95 @@ export interface WasmModule {
     bC1: number,
     bC2: number,
   ) => number
+
+  // Low-level provers and verifiers (see `sigma.ts`), taking parsed
+  // secp256k1_pubkey structs. All return 1 on success / a valid proof.
+  _secp256k1_ec_pubkey_parse: (
+    ctx: number,
+    outPubkey: number,
+    input: number,
+    inputLen: number,
+  ) => number
+  _secp256k1_mpt_get_h_generator: (ctx: number, outH: number) => number
+  _secp256k1_compact_standard_prove: (
+    ctx: number,
+    outProof: number,
+    amount: bigint,
+    balance: bigint,
+    rShared: number,
+    skA: number,
+    rB: number,
+    n: number,
+    c1: number,
+    c2Vec: number,
+    pkVec: number,
+    pcM: number,
+    pkA: number,
+    pcB: number,
+    b1: number,
+    b2: number,
+    contextHash: number,
+  ) => number
+  _secp256k1_compact_standard_verify: (
+    ctx: number,
+    proof: number,
+    n: number,
+    c1: number,
+    c2Vec: number,
+    pkVec: number,
+    pcM: number,
+    pkA: number,
+    pcB: number,
+    b1: number,
+    b2: number,
+    contextHash: number,
+  ) => number
+  _secp256k1_compact_convertback_prove: (
+    ctx: number,
+    outProof: number,
+    balance: bigint,
+    skA: number,
+    rho: number,
+    pkA: number,
+    b1: number,
+    b2: number,
+    pcB: number,
+    contextHash: number,
+  ) => number
+  _secp256k1_compact_convertback_verify: (
+    ctx: number,
+    proof: number,
+    pkA: number,
+    b1: number,
+    b2: number,
+    pcB: number,
+    contextHash: number,
+  ) => number
+  _secp256k1_bulletproof_prove_agg: (
+    ctx: number,
+    outProof: number,
+    proofLen: number,
+    values: number,
+    blindingsFlat: number,
+    m: number,
+    hGenerator: number,
+    contextHash: number,
+  ) => number
+  // Return 0 on success (mpt_utility convention).
+  _mpt_verify_clawback_proof: (
+    proof: number,
+    amount: bigint,
+    pubkey: number,
+    ciphertext: number,
+    contextHash: number,
+  ) => number
+  _mpt_verify_aggregated_bulletproof: (
+    proof: number,
+    proofLen: number,
+    commitments: number,
+    m: number,
+    contextHash: number,
+  ) => number
 }
 
 // eslint-disable-next-line @typescript-eslint/no-type-alias -- the Emscripten module factory's call signature

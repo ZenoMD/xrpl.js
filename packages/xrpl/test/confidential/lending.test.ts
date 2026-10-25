@@ -1,7 +1,10 @@
 import {
   decryptAmount,
   encryptAmount,
+  getConvertBackContextHash,
   getConvertContextHash,
+  getSendContextHash,
+  verifyConvertBackSigmaProof,
 } from '@xrplf/mpt-crypto'
 import { assert } from 'chai'
 import { decode, encode } from 'ripple-binary-codec'
@@ -9,11 +12,15 @@ import { decode, encode } from 'ripple-binary-codec'
 import { type Client, validate } from '../../src'
 import {
   accountIdHex,
+  getConfidentialLoanPayContextHash,
   getLendingBalance,
   getLoanBrokerSetContextHash,
+  getLoanBrokerSettleContextHash,
+  getLoanSetContextHash,
   prepareConfidentialLoanBrokerSet,
   prepareLoanBrokerDraw,
   prepareLoanBrokerMergeInbox,
+  prepareLoanBrokerSettle,
 } from '../../src/confidential'
 import { XrplError } from '../../src/errors'
 import { LoanBrokerFlags } from '../../src/models/ledger'
@@ -161,6 +168,68 @@ describe('confidential/lending', function () {
     })
   })
 
+  describe('lending context hashes', function () {
+    const account = accountIdHex(OWNER)
+    const pseudo = accountIdHex(PSEUDO_ACCOUNT)
+
+    /**
+     * The XLS-96 context prefix `TxType || Account || Issuance || Sequence`
+     * followed by `suffix`.
+     *
+     * @param txType - The 2-byte hex transaction type.
+     * @param accountHex - The 20-byte hex account.
+     * @param suffix - The hex remainder of the layout.
+     * @returns The context hash.
+     */
+    function layout(
+      txType: string,
+      accountHex: string,
+      suffix: string,
+    ): string {
+      return sha512Half(`${txType}${accountHex}${ISSUANCE_ID}0000012C${suffix}`)
+    }
+
+    it('LoanSet uses the WASM Send layout with ttLOAN_SET', async function () {
+      // ttCONFIDENTIAL_MPT_SEND (88) pins the layout.
+      assert.strictEqual(
+        layout('0058', pseudo, `${account}00000003`),
+        await getSendContextHash(pseudo, ISSUANCE_ID, 300, account, 3),
+      )
+      assert.strictEqual(
+        getLoanSetContextHash(PSEUDO_ACCOUNT, ISSUANCE_ID, 300, OWNER, 3),
+        layout('0050', pseudo, `${account}00000003`),
+      )
+    })
+
+    it('LoanBrokerSettle uses the WASM ConvertBack layout with ttLOAN_BROKER_SETTLE', async function () {
+      // ttCONFIDENTIAL_MPT_CONVERT_BACK (87) pins the layout.
+      assert.strictEqual(
+        layout('0057', pseudo, `${pseudo}00000004`),
+        await getConvertBackContextHash(pseudo, ISSUANCE_ID, 300, 4),
+      )
+      assert.strictEqual(
+        getLoanBrokerSettleContextHash(PSEUDO_ACCOUNT, ISSUANCE_ID, 300, 4),
+        layout('0053', pseudo, `${pseudo}00000004`),
+      )
+    })
+
+    it('ConfidentialLoanPay appends the LoanID and Loan version to the Send layout', function () {
+      assert.strictEqual(
+        getConfidentialLoanPayContextHash({
+          borrower: OWNER,
+          mptIssuanceID: ISSUANCE_ID,
+          sequence: 300,
+          brokerPseudoAccount: PSEUDO_ACCOUNT,
+          borrowerVersion: 5,
+          loanID: LOAN_BROKER_ID,
+          loanVersion: 2,
+        }),
+        // ttCONFIDENTIAL_LOAN_PAY (99)
+        layout('0063', account, `${pseudo}00000005${LOAN_BROKER_ID}00000002`),
+      )
+    })
+  })
+
   describe('prepareConfidentialLoanBrokerSet', function () {
     it('assembles a confidential LoanBrokerSet with the Broker Key and its proof', async function () {
       const tx = await prepareConfidentialLoanBrokerSet(lendingClient(), {
@@ -280,6 +349,97 @@ describe('confidential/lending', function () {
           amount: 1n,
         }),
         /no registered Broker Key/u,
+      )
+    })
+  })
+
+  describe('prepareLoanBrokerSettle', function () {
+    /**
+     * A client whose Lending Balance spends `balance` at version 4.
+     *
+     * @param balance - The spendable Lending Balance.
+     * @returns The client and the spending ciphertext.
+     */
+    async function settleClient(
+      balance: bigint,
+    ): Promise<{ client: Client; spending: string }> {
+      const spending = await encryptAmount(
+        balance,
+        BROKER_KEY.publicKey,
+        'CD'.repeat(32),
+      )
+      return {
+        client: lendingClient({
+          lendingBalance: {
+            HolderEncryptionKey: BROKER_KEY.publicKey,
+            ConfidentialBalanceSpending: spending,
+            ConfidentialBalanceVersion: 4,
+          },
+        }),
+        spending,
+      }
+    }
+
+    it('proves the settle against the Lending Balance', async function () {
+      const { client, spending } = await settleClient(1000n)
+      const tx = await prepareLoanBrokerSettle(client, {
+        account: OWNER,
+        loanBrokerID: LOAN_BROKER_ID,
+        amount: 400n,
+        brokerKeypair: BROKER_KEY,
+      })
+      assert.strictEqual(tx.TransactionType, 'LoanBrokerSettle')
+      assert.strictEqual(tx.Sequence, 7)
+      assert.deepEqual(tx.Amount, {
+        mpt_issuance_id: ISSUANCE_ID,
+        value: '400',
+      })
+      assert.lengthOf(tx.ZKProof, 816 * 2)
+      assertEncodable(tx as unknown as Record<string, unknown>)
+      assert.strictEqual(
+        tx.HolderEncryptedAmount,
+        await encryptAmount(400n, BROKER_KEY.publicKey, tx.BlindingFactor),
+      )
+      // The ConvertBack sigma part proves ownership of the Lending Balance,
+      // bound to the pseudo-account and the Lending Balance version.
+      assert.isTrue(
+        await verifyConvertBackSigmaProof(tx.ZKProof.slice(0, 256), {
+          publicKey: BROKER_KEY.publicKey,
+          ciphertext: spending,
+          commitment: tx.BalanceCommitment,
+          contextHash: getLoanBrokerSettleContextHash(
+            PSEUDO_ACCOUNT,
+            ISSUANCE_ID,
+            7,
+            4,
+          ),
+        }),
+      )
+    })
+
+    it('rejects a settle above the spendable Lending Balance', async function () {
+      const { client } = await settleClient(100n)
+      await expectXrplError(
+        prepareLoanBrokerSettle(client, {
+          account: OWNER,
+          loanBrokerID: LOAN_BROKER_ID,
+          amount: 101n,
+          brokerKeypair: BROKER_KEY,
+        }),
+        /exceeds the spendable Lending Balance 100/u,
+      )
+    })
+
+    it('rejects a keypair that is not the Broker Key', async function () {
+      const { client } = await settleClient(100n)
+      await expectXrplError(
+        prepareLoanBrokerSettle(client, {
+          account: OWNER,
+          loanBrokerID: LOAN_BROKER_ID,
+          amount: 1n,
+          brokerKeypair: KEY_B,
+        }),
+        /not the Broker Key/u,
       )
     })
   })

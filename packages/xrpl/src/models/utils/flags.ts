@@ -16,6 +16,7 @@ import { AMMDepositFlags } from '../transactions/AMMDeposit'
 import { AMMWithdrawFlags } from '../transactions/AMMWithdraw'
 import { BatchFlags } from '../transactions/batch'
 import { GlobalFlags } from '../transactions/common'
+import { ConfidentialLoanPayFlags } from '../transactions/confidentialLoanPay'
 import { LoanBrokerSetFlags } from '../transactions/loanBrokerSet'
 import { LoanManageFlags } from '../transactions/loanManage'
 import { LoanPayFlags } from '../transactions/loanPay'
@@ -122,6 +123,7 @@ const txToFlag = {
   AMMDeposit: AMMDepositFlags,
   AMMWithdraw: AMMWithdrawFlags,
   Batch: BatchFlags,
+  ConfidentialLoanPay: ConfidentialLoanPayFlags,
   LoanBrokerSet: LoanBrokerSetFlags,
   LoanManage: LoanManageFlags,
   LoanPay: LoanPayFlags,

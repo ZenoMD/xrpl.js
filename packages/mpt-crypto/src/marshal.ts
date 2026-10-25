@@ -92,6 +92,11 @@ export class Marshaller {
     return this.view().getUint32(ptr, true)
   }
 
+  /** Write a little-endian uint64 at `ptr`. */
+  public writeU64(ptr: number, value: bigint): void {
+    this.view().setBigUint64(ptr, value, true)
+  }
+
   /** Read a little-endian uint64 at `ptr`. */
   public readU64(ptr: number): bigint {
     return this.view().getBigUint64(ptr, true)

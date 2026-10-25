@@ -1,0 +1,46 @@
+diff --git a/.github/scripts/build-wasm.sh b/.github/scripts/build-wasm.sh
+index 68ae4bc..776eab2 100755
+--- a/.github/scripts/build-wasm.sh
++++ b/.github/scripts/build-wasm.sh
+@@ -322,6 +322,20 @@ EXPORTS="${EXPORTS},_secp256k1_elgamal_add,_secp256k1_elgamal_subtract"
+ # holder key, which _mpt_make_ec_pair (66-byte pairs) can't parse, so
+ # _secp256k1_ec_pubkey_parse is exported for that.
+ EXPORTS="${EXPORTS},_generate_canonical_encrypted_zero,_secp256k1_ec_pubkey_parse"
++# Low-level provers (secp256k1_pubkey in, defined in src/proof_compact_*.c and
++# src/bulletproof_aggregated.c). The Confidential Lending Protocol's LoanSet and
++# ConfidentialLoanPay proofs concatenate XLS-96 sigma proofs over custom
++# recipient sets and aggregated Bulletproofs over derived commitments, which the
++# per-transaction mpt_get_*_proof wrappers above cannot produce.
++EXPORTS="${EXPORTS},_secp256k1_compact_standard_prove"
++EXPORTS="${EXPORTS},_secp256k1_compact_convertback_prove"
++EXPORTS="${EXPORTS},_secp256k1_compact_clawback_prove"
++EXPORTS="${EXPORTS},_secp256k1_bulletproof_prove_agg,_secp256k1_mpt_get_h_generator"
++# The paired sigma verifiers, for client-side verification of those proofs
++# (rippled verifies each part of a lending proof with exactly these calls).
++EXPORTS="${EXPORTS},_secp256k1_compact_standard_verify"
++EXPORTS="${EXPORTS},_secp256k1_compact_convertback_verify"
++EXPORTS="${EXPORTS},_secp256k1_compact_clawback_verify"
+ 
+ # Why these -s link flags (they define the JS-facing contract, so don't drop them
+ # without checking the @xrplf/mpt-crypto TS wrapper):
+@@ -373,9 +387,9 @@ LINK_FLAGS=(
+ # Both ESM glues use `new URL('mpt_crypto.wasm', import.meta.url)` so bundlers
+ # auto-emit the .wasm as an asset instead of a runtime read. Keep the three links in
+ # lockstep — they must wrap the byte-identical module.
+-emcc "${LINK_FLAGS[@]}" -o "${OUT_DIR}/mpt_crypto.js"
++em++ "${LINK_FLAGS[@]}" -o "${OUT_DIR}/mpt_crypto.js"
+ wasm_sha_cjs="$(sha256_of "${OUT_DIR}/mpt_crypto.wasm")"
+-emcc "${LINK_FLAGS[@]}" -sEXPORT_ES6=1 -o "${OUT_DIR}/mpt_crypto.mjs"
++em++ "${LINK_FLAGS[@]}" -sEXPORT_ES6=1 -o "${OUT_DIR}/mpt_crypto.mjs"
+ wasm_sha_esm="$(sha256_of "${OUT_DIR}/mpt_crypto.wasm")"
+ # Browser-only glue. -sENVIRONMENT=web,worker (overriding web,node) drops the Node
+ # code path and its `node:` imports. Emscripten names the .wasm after the -o basename,
+@@ -384,7 +398,7 @@ wasm_sha_esm="$(sha256_of "${OUT_DIR}/mpt_crypto.wasm")"
+ # mpt_crypto.web.mjs would emit and reference a separate mpt_crypto.web.wasm.
+ web_tmp="$(mktemp -d)"
+ trap 'rm -rf "${web_tmp}"' EXIT
+-emcc "${LINK_FLAGS[@]}" -sEXPORT_ES6=1 -sENVIRONMENT=web,worker -o "${web_tmp}/mpt_crypto.mjs"
++em++ "${LINK_FLAGS[@]}" -sEXPORT_ES6=1 -sENVIRONMENT=web,worker -o "${web_tmp}/mpt_crypto.mjs"
+ wasm_sha_web="$(sha256_of "${web_tmp}/mpt_crypto.wasm")"
+ mv "${web_tmp}/mpt_crypto.mjs" "${OUT_DIR}/mpt_crypto.web.mjs"
+ 

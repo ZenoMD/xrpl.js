@@ -49,6 +49,11 @@ export { ConfidentialMPTConvert } from './ConfidentialMPTConvert'
 export { ConfidentialMPTConvertBack } from './ConfidentialMPTConvertBack'
 export { ConfidentialMPTMergeInbox } from './ConfidentialMPTMergeInbox'
 export { ConfidentialMPTSend } from './ConfidentialMPTSend'
+export {
+  ConfidentialLoanPay,
+  ConfidentialLoanPayFlags,
+  ConfidentialLoanPayFlagsInterface,
+} from './confidentialLoanPay'
 export { CredentialAccept } from './CredentialAccept'
 export { CredentialCreate } from './CredentialCreate'
 export { CredentialDelete } from './CredentialDelete'
@@ -71,6 +76,7 @@ export { LoanBrokerCoverWithdraw } from './loanBrokerCoverWithdraw'
 export { LoanBrokerCoverClawback } from './loanBrokerCoverClawback'
 export { LoanBrokerDraw } from './loanBrokerDraw'
 export { LoanBrokerMergeInbox } from './loanBrokerMergeInbox'
+export { LoanBrokerSettle } from './loanBrokerSettle'
 export { LoanSet, LoanSetFlags, LoanSetFlagsInterface } from './loanSet'
 export { LoanDelete } from './loanDelete'
 export {

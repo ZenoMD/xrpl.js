@@ -664,6 +664,67 @@ describe('client.autofill', function () {
       assert.strictEqual(txResult.Fee, '120')
     })
 
+    it('should autofill Fee of a LoanBrokerSettle', async function () {
+      const tx: Transaction = {
+        Account: 'rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn',
+        TransactionType: 'LoanBrokerSettle',
+        LoanBrokerID:
+          'E9A08C918E26407493CC4ADD381BA979CFEB7E440D0863B01FB31C231D167E42',
+        Amount: {
+          mpt_issuance_id: '000004C463C52827307480341125DA0577DEFC38405B0E3E',
+          value: '100',
+        },
+        HolderEncryptedAmount: 'AB'.repeat(66),
+        IssuerEncryptedAmount: 'AB'.repeat(66),
+        AuditorEncryptedAmount: 'AB'.repeat(66),
+        BlindingFactor: 'CD'.repeat(32),
+        BalanceCommitment: 'AB'.repeat(33),
+        ZKProof: 'AB'.repeat(816),
+      }
+      testContext.mockRippled!.addResponse(
+        'account_info',
+        rippled.account_info.normal,
+      )
+      testContext.mockRippled!.addResponse('ledger', rippled.ledger.normal)
+      testContext.mockRippled!.addResponse(
+        'server_info',
+        rippled.server_info.normal,
+      )
+
+      const txResult = await testContext.client.autofill(tx)
+      assert.strictEqual(txResult.Fee, '120')
+    })
+
+    it('should autofill Fee of a ConfidentialLoanPay', async function () {
+      const tx: Transaction = {
+        Account: 'rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn',
+        TransactionType: 'ConfidentialLoanPay',
+        LoanID:
+          'E9A08C918E26407493CC4ADD381BA979CFEB7E440D0863B01FB31C231D167E42',
+        SenderEncryptedAmount: 'AB'.repeat(66),
+        DestinationEncryptedAmount: 'AB'.repeat(66),
+        IssuerEncryptedAmount: 'AB'.repeat(66),
+        AuditorEncryptedAmount: 'AB'.repeat(66),
+        LoanAuditorEncryptedAmount: 'AB'.repeat(66),
+        BalanceCommitment: 'AB'.repeat(33),
+        AmountCommitment: 'AB'.repeat(33),
+        Flags: { tfLoanFullPayment: true },
+        ZKProof: 'AB'.repeat(1202),
+      }
+      testContext.mockRippled!.addResponse(
+        'account_info',
+        rippled.account_info.normal,
+      )
+      testContext.mockRippled!.addResponse('ledger', rippled.ledger.normal)
+      testContext.mockRippled!.addResponse(
+        'server_info',
+        rippled.server_info.normal,
+      )
+
+      const txResult = await testContext.client.autofill(tx)
+      assert.strictEqual(txResult.Fee, '120')
+    })
+
     it('should autofill Fee of a confidential MPT transaction with signersCount', async function () {
       const tx: Transaction = {
         Account: 'rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn',
@@ -899,6 +960,79 @@ describe('client.autofill', function () {
     const txResult = await testContext.client.autofill(tx)
     // base_fee + 3 * base_fee
     assert.strictEqual(txResult.Fee, '48')
+  })
+
+  it('should autofill the confidential fee of a confidential LoanSet', async function () {
+    const tx: LoanSet = {
+      TransactionType: 'LoanSet',
+      Account: 'rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf',
+      LoanBrokerID:
+        'E9A08C918E26407493CC4ADD381BA979CFEB7E440D0863B01FB31C231D167E42',
+      // Any confidential field makes the LoanSet confidential.
+      ZKProof: 'AB'.repeat(3030),
+    }
+    testContext.mockRippled!.addResponse('account_info', {
+      status: 'success',
+      type: 'response',
+      result: {
+        account_data: {
+          Sequence: 23,
+        },
+        signer_lists: [
+          {
+            SignerEntries: [
+              {
+                SignerEntry: {
+                  Account: 'rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf',
+                },
+              },
+              {
+                SignerEntry: {
+                  Account: 'rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn',
+                },
+              },
+              {
+                SignerEntry: {
+                  Account: 'rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    })
+    testContext.mockRippled!.addResponse('ledger', {
+      status: 'success',
+      type: 'response',
+      result: {
+        ledger_index: 9038214,
+      },
+    })
+    testContext.mockRippled!.addResponse('server_info', {
+      status: 'success',
+      type: 'response',
+      result: {
+        info: {
+          validated_ledger: {
+            base_fee_xrp: 0.00001,
+          },
+        },
+      },
+    })
+    testContext.mockRippled!.addResponse('ledger_entry', {
+      status: 'success',
+      type: 'response',
+      result: {
+        node: {
+          LedgerEntryType: 'LoanBroker',
+          Account: 'rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf',
+        },
+      },
+    })
+
+    const txResult = await testContext.client.autofill(tx)
+    // base_fee + 3 * base_fee + kCONFIDENTIAL_FEE_MULTIPLIER (9) * base_fee
+    assert.strictEqual(txResult.Fee, '156')
   })
 
   describe('Sponsorship autofill', function () {

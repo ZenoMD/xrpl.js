@@ -2,6 +2,17 @@
 
 Subscribe to [the **xrpl-announce** mailing list](https://groups.google.com/g/xrpl-announce) for release announcements. We recommend that `@xrplf/mpt-crypto` users stay up-to-date with the latest stable release.
 
+## Unreleased
+
+### Added
+
+- Low-level XLS-96 proof components for the Confidential Lending Protocol: `getSendSigmaProof` / `verifySendSigmaProof` (the Send sigma proof over any recipients), `getConvertBackSigmaProof` / `verifyConvertBackSigmaProof`, `getAggregatedRangeProof` / `verifyAggregatedRangeProof`, `verifyClawbackProof`, and the blinding-factor arithmetic `subtractScalars` / `multiplyScalar`.
+- `decryptAmount` takes an optional `rangeLow`, so a claimed amount can be checked in constant time.
+
+### Changed
+
+- The vendored WASM is an unreleased build that exports the low-level provers (see the README's "Confidential lending build").
+
 ## 0.1.1 (2026-08-20)
 
 ### Fixed

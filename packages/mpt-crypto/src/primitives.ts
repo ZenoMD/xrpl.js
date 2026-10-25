@@ -73,24 +73,29 @@ export async function encryptAmount(
 /**
  * Decrypt an ElGamal ciphertext with a private key.
  *
- * The amount is recovered by brute-forcing the discrete log over `[0, rangeHigh]`;
- * cost is O(rangeHigh) (~3s per 1,000,000), so pass the tightest correct bound
- * available (e.g. the issuance's confidential outstanding amount). An amount
- * above `rangeHigh` cannot be recovered.
+ * The amount is recovered by brute-forcing the discrete log over
+ * `[rangeLow, rangeHigh]`; cost is O(rangeHigh - rangeLow) (~3s per 1,000,000),
+ * so pass the tightest correct bound available (e.g. the issuance's confidential
+ * outstanding amount). An amount outside the range cannot be recovered; a range
+ * of one value checks a claimed amount in constant time.
  *
  * @param ciphertext - The 66-byte hex ciphertext.
  * @param privateKey - The 32-byte hex private key.
  * @param rangeHigh - Inclusive upper bound for the search; must be < 2^64 - 1.
+ * @param rangeLow - Inclusive lower bound for the search (default 0).
  * @returns The decrypted integer amount.
- * @throws If inputs are malformed, the amount is outside [0, rangeHigh], or the
- * WASM call fails.
+ * @throws If inputs are malformed, the amount is outside [rangeLow, rangeHigh],
+ * or the WASM call fails.
  */
+// eslint-disable-next-line max-params -- the optional lower bound extends the original signature
 export async function decryptAmount(
   ciphertext: string,
   privateKey: string,
   rangeHigh: bigint,
+  rangeLow: bigint = DECRYPT_RANGE_LOW,
 ): Promise<bigint> {
   assertUint64(rangeHigh, 'rangeHigh', MAX_DECRYPT_RANGE_HIGH)
+  assertUint64(rangeLow, 'rangeLow', rangeHigh)
   const ct = hexToBytes(ciphertext, 'ciphertext', ELGAMAL_TOTAL_SIZE)
   const priv = hexToBytes(privateKey, 'privateKey', PRIVKEY_SIZE)
   return withModule((mod, marshaller) => {
@@ -100,13 +105,7 @@ export async function decryptAmount(
     priv.fill(0)
     const outPtr = marshaller.alloc(U64_BYTES)
     if (
-      mod._mpt_decrypt_amount(
-        ctPtr,
-        privPtr,
-        outPtr,
-        DECRYPT_RANGE_LOW,
-        rangeHigh,
-      ) !== 0
+      mod._mpt_decrypt_amount(ctPtr, privPtr, outPtr, rangeLow, rangeHigh) !== 0
     ) {
       throw new Error('mpt_decrypt_amount failed')
     }

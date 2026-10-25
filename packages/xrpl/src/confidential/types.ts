@@ -202,10 +202,83 @@ export interface LoanBrokerDrawParams extends BaseLendingParams {
   amount: bigint
 }
 
+/** Inputs for {@link prepareLoanBrokerSettle}. */
+export interface LoanBrokerSettleParams extends BaseLendingParams {
+  /** The confidential LoanBroker settling to its Vault. */
+  loanBrokerID: string
+  /** The MPT amount to return from the spendable Lending Balance. */
+  amount: bigint
+  /** The Broker Key, which decrypts the Lending Balance to prove the settle. */
+  brokerKeypair: ConfidentialKeypair
+}
+
 /** Inputs for {@link prepareLoanBrokerMergeInbox}. */
 export interface LoanBrokerMergeInboxParams extends BaseLendingParams {
   /** The confidential LoanBroker whose Lending Balance inbox is merged. */
   loanBrokerID: string
+}
+
+/** Inputs for {@link prepareConfidentialLoanSet}. */
+export interface ConfidentialLoanSetParams extends BaseLendingParams {
+  /**
+   * The submitting account: the LoanBroker owner or the Borrower. The other
+   * party becomes `Counterparty` and co-signs (`signLoanSetByCounterparty`).
+   * Either way the Broker builds the proof, which binds this account's sequence.
+   */
+  account: string
+  /** The confidential LoanBroker lending from its Lending Balance. */
+  loanBrokerID: string
+  /** The Borrower's classic address. It must hold a confidential balance. */
+  borrower: string
+  /** The Broker Key, which decrypts the Lending Balance to prove the loan. */
+  brokerKeypair: ConfidentialKeypair
+  /** The Loan Auditor's ElGamal public key, agreed by Broker and Borrower. */
+  loanAuditorKey: string
+  /** The principal moved to the Borrower's inbox. */
+  principal: bigint
+  /** The Amount Owed: at least the principal. */
+  amountOwed: bigint
+  /** The Periodic Payment: `paymentTotal * periodicPayment` must cover `amountOwed`. */
+  periodicPayment: bigint
+  /** The number of payments (`PaymentTotal`). */
+  paymentTotal: number
+  /** Optional `PaymentInterval` in seconds. */
+  paymentInterval?: number
+  /** Optional `GracePeriod` in seconds. */
+  gracePeriod?: number
+  /** Optional arbitrary hex metadata (`Data`). */
+  data?: string
+}
+
+/** Inputs for {@link prepareConfidentialLoanPay}. */
+export interface ConfidentialLoanPayParams extends BaseLendingParams {
+  /** The Borrower's classic address (the submitting account). */
+  account: string
+  /** The confidential Loan being paid. */
+  loanID: string
+  /** The payment. */
+  amount: bigint
+  /** The Borrower's ElGamal keypair. */
+  borrowerKeypair: ConfidentialKeypair
+  /**
+   * Whether this is a full payment (`tfLoanFullPayment`) of the whole Amount
+   * Owed, closing the Loan. Defaults to `amount === amountOwed`.
+   */
+  fullPayment?: boolean
+  /**
+   * The Loan's current Amount Owed, if known. The builder checks it against the
+   * Loan's ciphertext in constant time instead of searching for it; without it,
+   * the search is bounded by `decryptBound` and costs O(bound).
+   */
+  amountOwed?: bigint
+  /** The Loan's Periodic Payment, if known (checked as `amountOwed` is). */
+  periodicPayment?: bigint
+  /**
+   * The search bound for decrypting terms not given above. Defaults to the
+   * issuance's `ConfidentialOutstandingAmount`, which may be below an Amount
+   * Owed that includes interest — pass the terms instead where possible.
+   */
+  decryptBound?: bigint
 }
 
 /** A confidential LoanBroker's decrypted Lending Balance. */

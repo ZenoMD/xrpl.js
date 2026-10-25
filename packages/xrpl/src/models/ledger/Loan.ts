@@ -142,6 +142,48 @@ export default interface Loan extends BaseLedgerEntry, HasPreviousTxnID {
    * It is determined based on the total loan value at creation time.
    */
   LoanScale?: number
+
+  /*
+   * Confidential Loans only (lsfLoanConfidential). Each term is three 66-byte
+   * ElGamal ciphertexts of the same value, under the Borrower's key, the Broker
+   * Key and the Loan Auditor's key.
+   */
+
+  /** The Loan Auditor's 33-byte compressed ElGamal public key. */
+  LoanAuditorEncryptionKey?: string
+
+  /** The principal under the Borrower's key. */
+  BorrowerEncryptedPrincipal?: string
+
+  /** The principal under the Broker Key. */
+  BrokerEncryptedPrincipal?: string
+
+  /** The principal under the Loan Auditor's key. */
+  LoanAuditorEncryptedPrincipal?: string
+
+  /** The Amount Owed under the Borrower's key. Reduced by each payment. */
+  BorrowerEncryptedAmountOwed?: string
+
+  /** The Amount Owed under the Broker Key. */
+  BrokerEncryptedAmountOwed?: string
+
+  /** The Amount Owed under the Loan Auditor's key. */
+  LoanAuditorEncryptedAmountOwed?: string
+
+  /** The Periodic Payment under the Borrower's key. */
+  BorrowerEncryptedPeriodicPayment?: string
+
+  /** The Periodic Payment under the Broker Key. */
+  BrokerEncryptedPeriodicPayment?: string
+
+  /** The Periodic Payment under the Loan Auditor's key. */
+  LoanAuditorEncryptedPeriodicPayment?: string
+
+  /**
+   * 0 at creation, incremented whenever an encrypted field changes. Bound into
+   * ConfidentialLoanPay proofs.
+   */
+  ConfidentialLoanVersion?: number
 }
 
 export enum LoanFlags {
@@ -159,4 +201,9 @@ export enum LoanFlags {
    * If set, indicates that the Loan supports overpayments.
    */
   lsfLoanOverpayment = 0x00040000,
+
+  /**
+   * If set, indicates that the Loan is confidential: its terms are encrypted.
+   */
+  lsfLoanConfidential = 0x00080000,
 }

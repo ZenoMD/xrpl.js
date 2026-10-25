@@ -85,3 +85,23 @@ rejects with `tecBAD_PROOF`. To update:
 `fetch-wasm.sh` verifies the bundle's `SHA256SUMS` manifest when the release
 ships one; integrity of the published npm package is further covered by the npm
 package hash.
+
+### Confidential lending build (unreleased)
+
+The `wasm/` files currently vendored are **not** a published release. They are
+built from `XRPLF/mpt-crypto` `main` at `4bbd640` (1.0.5 plus key-rotation
+additions; the proof systems are unchanged from 1.0.5) with
+[`scripts/build-wasm-lending-exports.patch`](./scripts/build-wasm-lending-exports.patch)
+applied. The patch exports the low-level provers and sigma verifiers the
+Confidential Lending Protocol needs (`secp256k1_compact_{standard,convertback,clawback}_{prove,verify}`,
+`secp256k1_bulletproof_prove_agg`, `secp256k1_mpt_get_h_generator`), wrapped by
+[`src/sigma.ts`](./src/sigma.ts), and links with `em++` (needed on `main`).
+
+Running `npm run fetch:wasm` (or the release pipeline) replaces them with the
+pinned release, which lacks those exports, until they land upstream. To rebuild:
+
+```sh
+git -C mpt-crypto checkout 4bbd640 && git -C mpt-crypto apply build-wasm-lending-exports.patch
+source emsdk/emsdk_env.sh && mpt-crypto/.github/scripts/build-wasm.sh
+cp mpt-crypto/emcc_out/mpt_crypto.{js,mjs,web.mjs,wasm} wasm/
+```

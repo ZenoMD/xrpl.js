@@ -181,6 +181,47 @@ await getLendingBalance(client, loanBrokerID, brokerKey.privateKey)
 | `prepareConfidentialLoanBrokerSet` | broker | Create a confidential LoanBroker, registering the Broker Key with a Schnorr proof bound to the `LoanBrokerSet` context hash. |
 | `prepareLoanBrokerDraw` | broker | Draw a public amount from the Vault into the Lending Balance inbox, encrypted under the Broker, issuer and auditor keys. |
 | `prepareLoanBrokerMergeInbox` | broker | Fold the Lending Balance inbox into its spendable balance. Requires no crypto material. |
+| `prepareLoanBrokerSettle` | broker | Return a public amount from the spendable Lending Balance to the Vault (a ConvertBack of the Lending Balance). |
+| `prepareConfidentialLoanSet` | broker | Create a confidential Loan: move the principal to the Borrower's inbox and encrypt the principal, Amount Owed and Periodic Payment under the Borrower, Broker and Loan Auditor keys, with the 3030-byte LoanSet proof. |
+| `prepareConfidentialLoanPay` | borrower | Pay a confidential Loan from the Borrower's confidential balance into the Lending Balance inbox — a regular payment (Periodic Payment ≤ X ≤ Amount Owed) or a full payment that closes it. |
+
+### Loans
+
+The Broker builds a confidential LoanSet, since its proof spends from the Lending
+Balance. Whichever party submits it, the other adds `CounterpartySignature` with
+`signLoanSetByCounterparty`:
+
+```ts
+const loanSet = await prepareConfidentialLoanSet(client, {
+  account: broker.classicAddress, // or the Borrower; the proof binds its sequence
+  loanBrokerID,
+  borrower: borrower.classicAddress, // must already hold a confidential balance
+  brokerKeypair: brokerKey,
+  loanAuditorKey: loanAuditor.publicKey,
+  principal: 600n,
+  amountOwed: 660n, // >= principal
+  periodicPayment: 60n, // paymentTotal * periodicPayment >= amountOwed
+  paymentTotal: 12,
+  paymentInterval: 2_592_000,
+})
+// Autofill before the counterparty signs, so submitting changes no signed field.
+const filled = await client.autofill(loanSet)
+const { tx: cosigned } = signLoanSetByCounterparty(borrower, filled)
+await client.submitAndWait(cosigned, { wallet: broker })
+
+// The Borrower pays; a payment equal to the Amount Owed is a full payment.
+const pay = await prepareConfidentialLoanPay(client, {
+  account: borrower.classicAddress,
+  loanID,
+  amount: 60n,
+  borrowerKeypair: borrowerKey,
+  // The agreed terms, checked against the Loan in constant time; without them
+  // the builder searches for them (~3s per million).
+  amountOwed: 660n,
+  periodicPayment: 60n,
+})
+await client.submitAndWait(pay, { wallet: borrower })
+```
 
 These are not yet supported as `prepareConfidentialBatch` operations.
 

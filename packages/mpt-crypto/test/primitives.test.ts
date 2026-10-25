@@ -79,4 +79,27 @@ describe('primitives', () => {
       /rangeHigh/u,
     )
   })
+
+  it('decrypts within [rangeLow, rangeHigh] only', async () => {
+    const blinding = await generateBlindingFactor()
+    const ciphertext = await encryptAmount(5_000_000_000n, PUBLIC_KEY, blinding)
+    // A one-value range checks a claimed amount without a search.
+    expect(
+      await decryptAmount(
+        ciphertext,
+        PRIVATE_KEY,
+        5_000_000_000n,
+        5_000_000_000n,
+      ),
+    ).toBe(5_000_000_000n)
+    await expect(
+      decryptAmount(ciphertext, PRIVATE_KEY, 4_999_999_999n, 4_999_999_999n),
+    ).rejects.toThrow(/mpt_decrypt_amount failed/u)
+    await expect(
+      decryptAmount(ciphertext, PRIVATE_KEY, 11n, 10n),
+    ).rejects.toThrow(/mpt_decrypt_amount failed/u)
+    await expect(
+      decryptAmount(ciphertext, PRIVATE_KEY, 1n, 2n),
+    ).rejects.toThrow(/rangeLow/u)
+  })
 })

@@ -18,6 +18,7 @@ import {
   Transaction,
 } from '../models/transactions'
 import { Account, areAddressesEqual } from '../models/transactions/common'
+import { isConfidentialLoanSet } from '../models/transactions/loanSet'
 import { hasFlag } from '../models/utils'
 import { xrpToDrops } from '../utils'
 
@@ -43,9 +44,11 @@ const CONFIDENTIAL_MPT_TRANSACTION_TYPES = [
   'ConfidentialMPTMergeInbox',
   // Confidential Lending Protocol: the Lending Balance equivalents of Convert and
   // MergeInbox. A confidential LoanBrokerSet is matched by flag in
-  // isConfidentialTransaction.
+  // isConfidentialTransaction, as is a confidential LoanSet.
   'LoanBrokerDraw',
   'LoanBrokerMergeInbox',
+  'LoanBrokerSettle',
+  'ConfidentialLoanPay',
 ]
 
 /**
@@ -63,7 +66,8 @@ function isConfidentialTransaction(tx: Transaction): boolean {
         tx,
         LoanBrokerSetFlags.tfLoanBrokerConfidential,
         'tfLoanBrokerConfidential',
-      ))
+      )) ||
+    (tx.TransactionType === 'LoanSet' && isConfidentialLoanSet(tx))
   )
 }
 

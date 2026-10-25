@@ -38,12 +38,24 @@ export { prepareConfidentialBatch } from './batch'
 
 export {
   fetchConfidentialLoanBroker,
+  fetchLendingContext,
   getLendingBalance,
-  getLoanBrokerSetContextHash,
   prepareConfidentialLoanBrokerSet,
   prepareLoanBrokerDraw,
   prepareLoanBrokerMergeInbox,
+  prepareLoanBrokerSettle,
 } from './lending'
+export type { LendingContext } from './lending'
+
+export { prepareConfidentialLoanPay, prepareConfidentialLoanSet } from './loan'
+
+export {
+  getConfidentialLoanPayContextHash,
+  getLoanBrokerSetContextHash,
+  getLoanBrokerSettleContextHash,
+  getLoanSetContextHash,
+} from './lendingContext'
+export type { ConfidentialLoanPayContext } from './lendingContext'
 
 export type {
   ConfidentialBatchInner,
@@ -54,10 +66,13 @@ export type {
   ConfidentialConvertParams,
   ConfidentialKeypair,
   ConfidentialLoanBrokerSetParams,
+  ConfidentialLoanPayParams,
+  ConfidentialLoanSetParams,
   ConfidentialMergeInboxParams,
   ConfidentialSendParams,
   ConfidentialSpendingState,
   LendingBalance,
   LoanBrokerDrawParams,
   LoanBrokerMergeInboxParams,
+  LoanBrokerSettleParams,
 } from './types'

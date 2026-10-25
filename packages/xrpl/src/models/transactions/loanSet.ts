@@ -1,8 +1,14 @@
+/* eslint-disable max-lines -- public and confidential LoanSet validation */
 import { ValidationError } from '../../errors'
 import { Signer } from '../common'
+import { hasFlag } from '../utils'
 
 import {
   BaseTransaction,
+  CONFIDENTIAL_EC_POINT_BYTES,
+  CONFIDENTIAL_ELGAMAL_CIPHERTEXT_BYTES,
+  CONFIDENTIAL_LOAN_SET_PROOF_BYTES,
+  isHexWithByteLength,
   validateHexMetadata,
   isLedgerEntryId,
   isNumber,
@@ -40,9 +46,10 @@ export interface LoanSet extends BaseTransaction {
   LoanBrokerID: string
 
   /**
-   * The principal amount requested by the Borrower.
+   * The principal amount requested by the Borrower. Required for a public Loan;
+   * not allowed for a confidential one, whose principal is encrypted.
    */
-  PrincipalRequested: XRPLNumber
+  PrincipalRequested?: XRPLNumber
 
   /**
    * The signature of the counterparty over the transaction.
@@ -121,7 +128,127 @@ export interface LoanSet extends BaseTransaction {
    */
   GracePeriod?: number
 
+  /*
+   * Confidential Loan fields (ConfidentialLendingProtocol). Required together
+   * for a Loan from a confidential LoanBroker, not allowed otherwise. Every
+   * ciphertext is a 66-byte ElGamal ciphertext and every key or commitment a
+   * 33-byte compressed point; the ciphertexts of each term (principal, Amount
+   * Owed, Periodic Payment) share one randomness.
+   */
+
+  /** The principal under the Broker Key. Subtracted from the Lending Balance. */
+  SenderEncryptedAmount?: string
+
+  /** The principal under the Borrower's key. Credited to the Borrower's inbox. */
+  DestinationEncryptedAmount?: string
+
+  /** The principal under the issuer's key. */
+  IssuerEncryptedAmount?: string
+
+  /** The principal under the MPT Auditor's key. */
+  AuditorEncryptedAmount?: string
+
+  /** A commitment to the Lending Balance's spending balance. */
+  BalanceCommitment?: string
+
+  /** A commitment to the principal. */
+  AmountCommitment?: string
+
+  /** The 3030-byte confidential LoanSet proof, built by the Broker. */
+  ZKProof?: string
+
+  /** The Loan Auditor's ElGamal public key. */
+  LoanAuditorEncryptionKey?: string
+
+  /** The principal under the Loan Auditor's key. */
+  LoanAuditorEncryptedPrincipal?: string
+
+  /** The initial Amount Owed under the Borrower's key. */
+  BorrowerEncryptedAmountOwed?: string
+
+  /** The initial Amount Owed under the Broker Key. */
+  BrokerEncryptedAmountOwed?: string
+
+  /** The initial Amount Owed under the Loan Auditor's key. */
+  LoanAuditorEncryptedAmountOwed?: string
+
+  /** The Periodic Payment under the Borrower's key. */
+  BorrowerEncryptedPeriodicPayment?: string
+
+  /** The Periodic Payment under the Broker Key. */
+  BrokerEncryptedPeriodicPayment?: string
+
+  /** The Periodic Payment under the Loan Auditor's key. */
+  LoanAuditorEncryptedPeriodicPayment?: string
+
+  /** A commitment to the Amount Owed. */
+  AmountOwedCommitment?: string
+
+  /** A commitment to the Periodic Payment. */
+  PeriodicPaymentCommitment?: string
+
   Flags?: number | LoanSetFlagsInterface
+}
+
+// Each term's ciphertexts, which share one randomness (and so their first 33
+// bytes); different terms must not.
+const CONFIDENTIAL_TERM_CIPHERTEXTS = [
+  [
+    'SenderEncryptedAmount',
+    'DestinationEncryptedAmount',
+    'IssuerEncryptedAmount',
+    'AuditorEncryptedAmount',
+    'LoanAuditorEncryptedPrincipal',
+  ],
+  [
+    'BorrowerEncryptedAmountOwed',
+    'BrokerEncryptedAmountOwed',
+    'LoanAuditorEncryptedAmountOwed',
+  ],
+  [
+    'BorrowerEncryptedPeriodicPayment',
+    'BrokerEncryptedPeriodicPayment',
+    'LoanAuditorEncryptedPeriodicPayment',
+  ],
+]
+
+const CONFIDENTIAL_POINTS = [
+  'LoanAuditorEncryptionKey',
+  'BalanceCommitment',
+  'AmountCommitment',
+  'AmountOwedCommitment',
+  'PeriodicPaymentCommitment',
+]
+
+const CONFIDENTIAL_FIELDS = [
+  ...CONFIDENTIAL_TERM_CIPHERTEXTS.flat(),
+  ...CONFIDENTIAL_POINTS,
+  'ZKProof',
+]
+
+// Public terms a confidential LoanSet must not carry.
+const PUBLIC_TERM_FIELDS = [
+  'PrincipalRequested',
+  'LoanOriginationFee',
+  'LoanServiceFee',
+  'LatePaymentFee',
+  'ClosePaymentFee',
+  'OverpaymentFee',
+  'InterestRate',
+  'LateInterestRate',
+  'CloseInterestRate',
+  'OverpaymentInterestRate',
+]
+
+/**
+ * Whether a LoanSet creates a confidential Loan: it carries any of the
+ * confidential fields.
+ *
+ * @param tx - LoanSet Transaction.
+ * @returns True if any confidential field is present.
+ */
+export function isConfidentialLoanSet(tx: Record<string, unknown>): boolean {
+  return CONFIDENTIAL_FIELDS.some((field) => tx[field] != null)
 }
 
 /**
@@ -177,7 +304,11 @@ export function validateLoanSet(tx: Record<string, unknown>): void {
   validateBaseTransaction(tx)
 
   validateRequiredField(tx, 'LoanBrokerID', isString)
-  validateRequiredField(tx, 'PrincipalRequested', isXRPLNumber)
+  if (isConfidentialLoanSet(tx)) {
+    validateConfidentialLoanSet(tx)
+  } else {
+    validateRequiredField(tx, 'PrincipalRequested', isXRPLNumber)
+  }
   validateOptionalField(tx, 'CounterpartySignature', isRecord)
   validateOptionalField(tx, 'Data', isString)
   validateOptionalField(tx, 'Counterparty', isAccount)
@@ -267,4 +398,83 @@ export function validateLoanSet(tx: Record<string, unknown>): void {
       `LoanSet: GracePeriod must not be greater than PaymentInterval`,
     )
   }
+}
+
+/**
+ * Validate the fields of a confidential LoanSet, mirroring rippled's preflight.
+ *
+ * @param tx - LoanSet Transaction.
+ * @throws When the confidential fields are malformed.
+ */
+// eslint-disable-next-line max-lines-per-function -- exhaustive validations
+function validateConfidentialLoanSet(tx: Record<string, unknown>): void {
+  for (const field of CONFIDENTIAL_TERM_CIPHERTEXTS.flat()) {
+    validateRequiredField(
+      tx,
+      field,
+      isHexWithByteLength(CONFIDENTIAL_ELGAMAL_CIPHERTEXT_BYTES),
+    )
+  }
+  for (const field of CONFIDENTIAL_POINTS) {
+    validateRequiredField(
+      tx,
+      field,
+      isHexWithByteLength(CONFIDENTIAL_EC_POINT_BYTES),
+    )
+  }
+  validateRequiredField(
+    tx,
+    'ZKProof',
+    isHexWithByteLength(CONFIDENTIAL_LOAN_SET_PROOF_BYTES),
+  )
+
+  const publicTerm = PUBLIC_TERM_FIELDS.find((field) => tx[field] != null)
+  if (publicTerm != null) {
+    throw new ValidationError(
+      `LoanSet: ${publicTerm} is not allowed on a confidential Loan`,
+    )
+  }
+  if (hasFlag(tx, LoanSetFlags.tfLoanOverpayment, 'tfLoanOverpayment')) {
+    throw new ValidationError(
+      'LoanSet: tfLoanOverpayment is not allowed on a confidential Loan',
+    )
+  }
+
+  const c1s = new Set<string>()
+  for (const term of CONFIDENTIAL_TERM_CIPHERTEXTS) {
+    const c1 = sharedC1(tx, term)
+    if (c1 == null) {
+      throw new ValidationError(
+        `LoanSet: ${term.join(', ')} must share one randomness`,
+      )
+    }
+    if (c1s.has(c1)) {
+      throw new ValidationError(
+        'LoanSet: each confidential term must use a different randomness',
+      )
+    }
+    c1s.add(c1)
+  }
+}
+
+/**
+ * The first 33 bytes (C1 = r·G) shared by ciphertexts encrypted with one
+ * randomness.
+ *
+ * @param tx - The transaction holding the ciphertexts.
+ * @param fields - The ciphertext fields.
+ * @returns The shared C1 as uppercase hex, or undefined if they differ.
+ */
+export function sharedC1(
+  tx: Record<string, unknown>,
+  fields: string[],
+): string | undefined {
+  const c1s = new Set(
+    fields.map((field) =>
+      String(tx[field])
+        .slice(0, CONFIDENTIAL_EC_POINT_BYTES * 2)
+        .toUpperCase(),
+    ),
+  )
+  return c1s.size === 1 ? Array.from(c1s)[0] : undefined
 }

@@ -24,6 +24,10 @@ import {
   validateBaseTransaction,
 } from './common'
 import {
+  ConfidentialLoanPay,
+  validateConfidentialLoanPay,
+} from './confidentialLoanPay'
+import {
   ConfidentialMPTClawback,
   validateConfidentialMPTClawback,
 } from './ConfidentialMPTClawback'
@@ -73,6 +77,7 @@ import {
   validateLoanBrokerMergeInbox,
 } from './loanBrokerMergeInbox'
 import { LoanBrokerSet, validateLoanBrokerSet } from './loanBrokerSet'
+import { LoanBrokerSettle, validateLoanBrokerSettle } from './loanBrokerSettle'
 import { LoanDelete, validateLoanDelete } from './loanDelete'
 import { LoanManage, validateLoanManage } from './loanManage'
 import { LoanPay, validateLoanPay } from './loanPay'
@@ -200,6 +205,7 @@ export type SubmittableTransaction =
   | ConfidentialMPTConvertBack
   | ConfidentialMPTMergeInbox
   | ConfidentialMPTSend
+  | ConfidentialLoanPay
   | CredentialAccept
   | CredentialCreate
   | CredentialDelete
@@ -217,6 +223,7 @@ export type SubmittableTransaction =
   | LoanBrokerDelete
   | LoanBrokerDraw
   | LoanBrokerMergeInbox
+  | LoanBrokerSettle
   | LoanSet
   | LoanDelete
   | LoanManage
@@ -405,6 +412,10 @@ export function validate(transaction: Record<string, unknown>): void {
       validateConfidentialMPTSend(tx)
       break
 
+    case 'ConfidentialLoanPay':
+      validateConfidentialLoanPay(tx)
+      break
+
     case 'CredentialAccept':
       validateCredentialAccept(tx)
       break
@@ -467,6 +478,10 @@ export function validate(transaction: Record<string, unknown>): void {
 
     case 'LoanBrokerMergeInbox':
       validateLoanBrokerMergeInbox(tx)
+      break
+
+    case 'LoanBrokerSettle':
+      validateLoanBrokerSettle(tx)
       break
 
     case 'LoanBrokerSet':

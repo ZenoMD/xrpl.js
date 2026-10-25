@@ -4,6 +4,7 @@
 
 ### Added
 * Add the Confidential Lending Protocol `LoanBrokerDraw` (97) and `LoanBrokerMergeInbox` (98) transaction types, the `tfLoanBrokerConfidential` and `lsfLoanBrokerConfidential` flags, and `HolderEncryptionKey`/`ZKProof` on `LoanBrokerSet`.
+* Add confidential Loans: the `LoanBrokerSettle` (83) and `ConfidentialLoanPay` (99) transaction types, the `ConfidentialLoanVersion` and twelve encrypted-term/commitment fields on `LoanSet` and `Loan`, `lsfLoanConfidential`, and `tfLoanFullPayment` on `ConfidentialLoanPay`. `PrincipalRequested` is now optional on `LoanSet`.
 
 ## 2.11.0 (2026-09-11)
 

@@ -30,6 +30,15 @@ export const CONVERT_BACK_PROOF_SIZE = 816
 /** ConfidentialMPTSend ZKProof length (192 sigma + 754 bulletproof). */
 export const SEND_PROOF_SIZE = 946
 
+/** The compact AND-composed Send sigma proof, over any number of recipients. */
+export const SEND_SIGMA_PROOF_SIZE = 192
+/** The compact ConvertBack sigma proof (balance linkage). */
+export const CONVERT_BACK_SIGMA_PROOF_SIZE = 128
+/** An aggregated Bulletproof over one commitment. */
+export const SINGLE_BULLETPROOF_SIZE = 688
+/** An aggregated Bulletproof over two commitments. */
+export const DOUBLE_BULLETPROOF_SIZE = 754
+
 /**
  * In-memory layout of the C `mpt_confidential_participant` struct
  * (`{ uint8_t pubkey[33]; uint8_t ciphertext[66]; }`, alignment 1).
